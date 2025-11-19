@@ -16,18 +16,19 @@ import org.bukkit.potion.PotionEffect;
 import org.bukkit.potion.PotionEffectType;
 
 import java.util.HashMap;
+import java.util.Map;
 import java.util.UUID;
 
 public class CarryingManager {
 
     private final RealCarry plugin;
 
-    private final HashMap<UUID, Entity> carryingEntity = new HashMap<>();
-    private final HashMap<UUID, BlockData> carryingBlock = new HashMap<>();
-    private final HashMap<UUID, BlockState> carriedBlockState = new HashMap<>();
-    private final HashMap<UUID, ArmorStand> blockVisual = new HashMap<>();
+    private final Map<UUID, Entity> carryingEntity = new HashMap<>();
+    private final Map<UUID, BlockData> carryingBlock = new HashMap<>();
+    private final Map<UUID, BlockState> carriedBlockState = new HashMap<>();
+    private final Map<UUID, ArmorStand> blockVisual = new HashMap<>();
 
-    private final HashMap<UUID, Boolean> entityAIState = new HashMap<>();
+    private final Map<UUID, Boolean> entityAIState = new HashMap<>();
 
     public CarryingManager(RealCarry plugin) {
         this.plugin = plugin;
@@ -39,11 +40,11 @@ public class CarryingManager {
     }
 
     // ================================================================
-    //                    Carry Player / Any Mob
+    //                    Carrying Entity (Player / Mob)
     // ================================================================
     public void startCarryingEntity(Player player, Entity target) {
-
         UUID id = player.getUniqueId();
+
         carryingEntity.put(id, target);
 
         if (target instanceof Mob mob) {
@@ -52,13 +53,13 @@ public class CarryingManager {
         }
 
         player.addPassenger(target);
-
         applySlow(player);
+
         player.sendMessage(plugin.getMsg("carrying-entity").replace("%entity%", target.getName()));
     }
 
     // ================================================================
-    //                          Carry Block
+    //                         Carrying Block
     // ================================================================
     public void startCarryingBlock(Player player, Block block) {
 
@@ -93,18 +94,18 @@ public class CarryingManager {
     }
 
     // ================================================================
-    //                              Place
+    //                       Placing (Entity / Block)
     // ================================================================
     public void stopCarrying(Player player, Location drop) {
 
         UUID id = player.getUniqueId();
 
-        // Entity
+        // ---------------- ENTITY ----------------
         if (carryingEntity.containsKey(id)) {
 
             Entity entity = carryingEntity.remove(id);
 
-            if (entity != null && player.getPassengers().contains(entity))
+            if (player.getPassengers().contains(entity))
                 player.removePassenger(entity);
 
             if (entity instanceof Mob mob) {
@@ -114,11 +115,11 @@ public class CarryingManager {
             }
 
             if (entity != null && entity.isValid()) {
-                entity.teleport(drop.add(0.5, 0, 0.5));
+                entity.teleport(drop.clone().add(0.5, 0, 0.5));
             }
         }
 
-        // Block
+        // ---------------- BLOCK ----------------
         else if (carryingBlock.containsKey(id)) {
 
             BlockState state = carriedBlockState.remove(id);
@@ -131,8 +132,15 @@ public class CarryingManager {
             }
 
             if (state != null) {
+
+                // ตั้งค่าบล็อกใหม่
                 Block target = drop.getBlock();
                 target.setType(state.getType(), false);
+
+                // ย้าย BlockState ไปที่ตำแหน่งใหม่ (สำคัญมาก!)
+                state.setLocation(drop);
+
+                // อัปเดตข้อมูล เช่น ชื่อกล่อง / ของในกล่อง
                 state.update(true, false);
             }
 
@@ -144,7 +152,7 @@ public class CarryingManager {
     }
 
     // ================================================================
-    //                              Effects
+    //                       Apply / Remove Slow
     // ================================================================
     private void applySlow(Player player) {
         int lv = plugin.getConfig().getInt("slowness-level", 0);
@@ -156,19 +164,20 @@ public class CarryingManager {
     }
 
     // ================================================================
-    //                            Cleanup
+    //                          Player Quit
     // ================================================================
     public void handlePlayerQuit(Player player) {
-        if (isCarrying(player))
+        if (isCarrying(player)) {
             stopCarrying(player, player.getLocation().add(0, 0.5, 0));
+        }
     }
 
     // ================================================================
-    //                        clearAllCarrying
+    //                        Clear All Carrying
     // ================================================================
     public void clearAllCarrying() {
 
-        // Clear entities
+        // -------- Clear entities --------
         for (UUID uuid : new HashMap<>(carryingEntity).keySet()) {
 
             Player player = plugin.getServer().getPlayer(uuid);
@@ -182,7 +191,7 @@ public class CarryingManager {
                 entityAIState.remove(uuid);
             }
 
-            if (entity != null && player.getPassengers().contains(entity))
+            if (player.getPassengers().contains(entity))
                 player.removePassenger(entity);
 
             if (entity != null && entity.isValid()) {
@@ -190,7 +199,7 @@ public class CarryingManager {
             }
         }
 
-        // Clear blocks
+        // -------- Clear blocks --------
         for (UUID uuid : new HashMap<>(carryingBlock).keySet()) {
 
             Player player = plugin.getServer().getPlayer(uuid);
@@ -206,8 +215,11 @@ public class CarryingManager {
             }
 
             if (state != null) {
-                Block block = player.getLocation().add(0, 0.5, 0).getBlock();
-                block.setType(state.getType(), false);
+
+                Block drop = player.getLocation().add(0, 0.5, 0).getBlock();
+
+                drop.setType(state.getType(), false);
+                state.setLocation(drop.getLocation());
                 state.update(true, false);
             }
 
