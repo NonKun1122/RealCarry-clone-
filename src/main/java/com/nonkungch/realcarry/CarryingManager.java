@@ -1,4 +1,4 @@
-package com.nonkkungch.realcarry;
+package com.nonkungch.realcarry;
 
 import org.bukkit.Location;
 import org.bukkit.Material;
@@ -22,13 +22,11 @@ public class CarryingManager {
 
     private final RealCarry plugin;
 
-    // ของที่ผู้เล่นอุ้ม
     private final HashMap<UUID, Entity> carryingEntity = new HashMap<>();
     private final HashMap<UUID, BlockData> carryingBlock = new HashMap<>();
     private final HashMap<UUID, BlockState> carriedBlockState = new HashMap<>();
     private final HashMap<UUID, ArmorStand> blockVisual = new HashMap<>();
 
-    // เก็บค่า AI เดิมของมอน
     private final HashMap<UUID, Boolean> entityAIState = new HashMap<>();
 
     public CarryingManager(RealCarry plugin) {
@@ -41,17 +39,16 @@ public class CarryingManager {
     }
 
     // ================================================================
-    //                    อุ้ม Player / มอนทุกชนิด
+    //                    Carry Player / Any Mob
     // ================================================================
     public void startCarryingEntity(Player player, Entity target) {
 
         UUID id = player.getUniqueId();
         carryingEntity.put(id, target);
 
-        // ถ้าเป็นมอนสเตอร์ ให้ปิด AI
         if (target instanceof Mob mob) {
-            entityAIState.put(id, mob.hasAI());   // เก็บค่าเดิม
-            mob.setAI(false);                     // ปิด AI ตอนถูกอุ้ม
+            entityAIState.put(id, mob.hasAI());
+            mob.setAI(false);
         }
 
         player.addPassenger(target);
@@ -61,7 +58,7 @@ public class CarryingManager {
     }
 
     // ================================================================
-    //                               อุ้มบล็อก
+    //                          Carry Block
     // ================================================================
     public void startCarryingBlock(Player player, Block block) {
 
@@ -70,14 +67,11 @@ public class CarryingManager {
         BlockData data = block.getBlockData();
         BlockState state = block.getState();
 
-        // สำคัญมาก — ป้องกันของในกล่องหาย
         carriedBlockState.put(id, state);
         carryingBlock.put(id, data);
 
-        // ลบบล็อกจากโลก
         block.setType(Material.AIR);
 
-        // ArmorStand แสดงผลบล็อก
         Location loc = player.getLocation().add(0, 0.02, 0);
         ArmorStand stand = (ArmorStand) player.getWorld().spawnEntity(loc, EntityType.ARMOR_STAND);
 
@@ -99,13 +93,13 @@ public class CarryingManager {
     }
 
     // ================================================================
-    //                                วาง
+    //                              Place
     // ================================================================
     public void stopCarrying(Player player, Location drop) {
 
         UUID id = player.getUniqueId();
 
-        // ---------------- วาง Entity ----------------
+        // Entity
         if (carryingEntity.containsKey(id)) {
 
             Entity entity = carryingEntity.remove(id);
@@ -113,7 +107,6 @@ public class CarryingManager {
             if (entity != null && player.getPassengers().contains(entity))
                 player.removePassenger(entity);
 
-            // คืน AI ให้มอนสเตอร์
             if (entity instanceof Mob mob) {
                 boolean oldAI = entityAIState.getOrDefault(id, true);
                 mob.setAI(oldAI);
@@ -125,7 +118,7 @@ public class CarryingManager {
             }
         }
 
-        // ---------------- วาง Block ----------------
+        // Block
         else if (carryingBlock.containsKey(id)) {
 
             BlockState state = carriedBlockState.remove(id);
@@ -137,7 +130,6 @@ public class CarryingManager {
                 stand.remove();
             }
 
-            // คืนบล็อกพร้อมข้อมูลในตัวมัน
             if (state != null) {
                 Block target = drop.getBlock();
                 target.setType(state.getType(), false);
@@ -152,7 +144,7 @@ public class CarryingManager {
     }
 
     // ================================================================
-    //                                Effects
+    //                              Effects
     // ================================================================
     private void applySlow(Player player) {
         int lv = plugin.getConfig().getInt("slowness-level", 0);
@@ -164,20 +156,19 @@ public class CarryingManager {
     }
 
     // ================================================================
-    //                                Cleanup
+    //                            Cleanup
     // ================================================================
     public void handlePlayerQuit(Player player) {
-        if (isCarrying(player)) {
+        if (isCarrying(player))
             stopCarrying(player, player.getLocation().add(0, 0.5, 0));
-        }
     }
 
     // ================================================================
-    //                         clearAllCarrying()
+    //                        clearAllCarrying
     // ================================================================
     public void clearAllCarrying() {
 
-        // ----- เคลียร์ Entity ที่ถูกอุ้ม -----
+        // Clear entities
         for (UUID uuid : new HashMap<>(carryingEntity).keySet()) {
 
             Player player = plugin.getServer().getPlayer(uuid);
@@ -185,23 +176,21 @@ public class CarryingManager {
 
             Entity entity = carryingEntity.remove(uuid);
 
-            if (entity != null && player.getPassengers().contains(entity))
-                player.removePassenger(entity);
-
-            // คืน AI
             if (entity instanceof Mob mob) {
                 boolean oldAI = entityAIState.getOrDefault(uuid, true);
                 mob.setAI(oldAI);
+                entityAIState.remove(uuid);
             }
 
-            entityAIState.remove(uuid);
+            if (entity != null && player.getPassengers().contains(entity))
+                player.removePassenger(entity);
 
             if (entity != null && entity.isValid()) {
                 entity.teleport(player.getLocation().add(0.5, 0, 0.5));
             }
         }
 
-        // ----- เคลียร์ Block ที่ถูกอุ้ม -----
+        // Clear blocks
         for (UUID uuid : new HashMap<>(carryingBlock).keySet()) {
 
             Player player = plugin.getServer().getPlayer(uuid);
