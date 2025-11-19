@@ -4,6 +4,7 @@ import org.bukkit.Location;
 import org.bukkit.Material;
 import org.bukkit.block.Block;
 import org.bukkit.block.BlockState;
+import org.bukkit.block.Container;
 import org.bukkit.block.data.BlockData;
 import org.bukkit.entity.ArmorStand;
 import org.bukkit.entity.Entity;
@@ -11,6 +12,8 @@ import org.bukkit.entity.EntityType;
 import org.bukkit.entity.Mob;
 import org.bukkit.entity.Player;
 import org.bukkit.inventory.EquipmentSlot;
+import org.bukkit.inventory.Inventory;
+import org.bukkit.inventory.InventoryHolder;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.potion.PotionEffect;
 import org.bukkit.potion.PotionEffectType;
@@ -27,6 +30,7 @@ public class CarryingManager {
     private final Map<UUID, BlockData> carryingBlock = new HashMap<>();
     private final Map<UUID, BlockState> carriedBlockState = new HashMap<>();
     private final Map<UUID, ArmorStand> blockVisual = new HashMap<>();
+    private final Map<UUID, Inventory> carriedInventories = new HashMap<>();
 
     private final Map<UUID, Boolean> entityAIState = new HashMap<>();
 
@@ -62,7 +66,6 @@ public class CarryingManager {
     //                         Carrying Block
     // ================================================================
     public void startCarryingBlock(Player player, Block block) {
-
         UUID id = player.getUniqueId();
 
         BlockData data = block.getBlockData();
@@ -70,6 +73,19 @@ public class CarryingManager {
 
         carriedBlockState.put(id, state);
         carryingBlock.put(id, data);
+
+        // เก็บ Inventory ถ้าเป็น Container
+        if (state instanceof InventoryHolder holder) {
+            Inventory oldInv = holder.getInventory();
+            Inventory invCopy = holder.getInventory().getSize() > 0 ? 
+                holder.getInventory().getContents().length > 0 ?
+                Bukkit.createInventory(null, oldInv.getSize()) :
+                null : null;
+            if (invCopy != null) {
+                invCopy.setContents(oldInv.getContents());
+                carriedInventories.put(id, invCopy);
+            }
+        }
 
         block.setType(Material.AIR);
 
@@ -97,12 +113,10 @@ public class CarryingManager {
     //                       Placing (Entity / Block)
     // ================================================================
     public void stopCarrying(Player player, Location drop) {
-
         UUID id = player.getUniqueId();
 
         // ---------------- ENTITY ----------------
         if (carryingEntity.containsKey(id)) {
-
             Entity entity = carryingEntity.remove(id);
 
             if (player.getPassengers().contains(entity))
@@ -124,6 +138,7 @@ public class CarryingManager {
 
             BlockState state = carriedBlockState.remove(id);
             ArmorStand stand = blockVisual.remove(id);
+            Inventory inv = carriedInventories.remove(id);
 
             if (stand != null) {
                 if (player.getPassengers().contains(stand))
@@ -132,16 +147,14 @@ public class CarryingManager {
             }
 
             if (state != null) {
-
-                // ตั้งค่าบล็อกใหม่
                 Block target = drop.getBlock();
                 target.setType(state.getType(), false);
+                target.setBlockData(state.getBlockData(), false);
 
-                // ย้าย BlockState ไปที่ตำแหน่งใหม่ (สำคัญมาก!)
-                state.setLocation(drop);
-
-                // อัปเดตข้อมูล เช่น ชื่อกล่อง / ของในกล่อง
-                state.update(true, false);
+                // ใส่ Inventory กลับ ถ้าเป็น Container
+                if (inv != null && target.getState() instanceof InventoryHolder newHolder) {
+                    newHolder.getInventory().setContents(inv.getContents());
+                }
             }
 
             carryingBlock.remove(id);
@@ -176,15 +189,12 @@ public class CarryingManager {
     //                        Clear All Carrying
     // ================================================================
     public void clearAllCarrying() {
-
         // -------- Clear entities --------
         for (UUID uuid : new HashMap<>(carryingEntity).keySet()) {
-
             Player player = plugin.getServer().getPlayer(uuid);
             if (player == null) continue;
 
             Entity entity = carryingEntity.remove(uuid);
-
             if (entity instanceof Mob mob) {
                 boolean oldAI = entityAIState.getOrDefault(uuid, true);
                 mob.setAI(oldAI);
@@ -201,12 +211,12 @@ public class CarryingManager {
 
         // -------- Clear blocks --------
         for (UUID uuid : new HashMap<>(carryingBlock).keySet()) {
-
             Player player = plugin.getServer().getPlayer(uuid);
             if (player == null) continue;
 
             BlockState state = carriedBlockState.remove(uuid);
             ArmorStand stand = blockVisual.remove(uuid);
+            Inventory inv = carriedInventories.remove(uuid);
 
             if (stand != null) {
                 if (player.getPassengers().contains(stand))
@@ -215,12 +225,13 @@ public class CarryingManager {
             }
 
             if (state != null) {
-
                 Block drop = player.getLocation().add(0, 0.5, 0).getBlock();
-
                 drop.setType(state.getType(), false);
-                state.setLocation(drop.getLocation());
-                state.update(true, false);
+                drop.setBlockData(state.getBlockData(), false);
+
+                if (inv != null && drop.getState() instanceof InventoryHolder newHolder) {
+                    newHolder.getInventory().setContents(inv.getContents());
+                }
             }
 
             carryingBlock.remove(uuid);
