@@ -1,29 +1,5 @@
 package com.nonkungch.realcarry;
 
-import org.bukkit.Location;
-import org.bukkit.Material;
-import org.bukkit.block.Block;
-import org.bukkit.block.BlockState;
-import org.bukkit.block.Container;
-import org.bukkit.block.data.BlockData;
-import org.bukkit.entity.ArmorStand;
-import org.bukkit.entity.Entity;
-import org.bukkit.entity.EntityType;
-import org.bukkit.entity.Mob;
-import org.bukkit.entity.Player;
-import org.bukkit.inventory.EquipmentSlot;
-import org.bukkit.inventory.Inventory;
-import org.bukkit.inventory.InventoryHolder;
-import org.bukkit.inventory.ItemStack;
-import org.bukkit.potion.PotionEffect;
-import org.bukkit.potion.PotionEffectType;
-
-import java.util.HashMap;
-import java.util.Map;
-import java.util.UUID;
-
-public class CarryingManager package com.nonkungch.realcarry;
-
 import org.bukkit.Bukkit;
 import org.bukkit.Location;
 import org.bukkit.Material;
@@ -155,7 +131,6 @@ public class CarryingManager {
 
         // ---------------- BLOCK ----------------
         else if (carryingBlock.containsKey(id)) {
-
             BlockState state = carriedBlockState.remove(id);
             ArmorStand stand = blockVisual.remove(id);
             Inventory inv = carriedInventories.remove(id);
