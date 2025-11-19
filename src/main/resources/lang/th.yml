@@ -1,0 +1,30 @@
+# Thai Language File for RealCarry
+
+# Messages
+cannot-carry: "§cคุณไม่สามารถอุ้มบล็อกนี้ได้!"
+already-carrying: "§cคุณต้องวางของที่อุ้มอยู่ลงก่อน!"
+carry-success: "§aคุณอุ้มบล็อกขึ้นมาแล้ว! ปล่อย Shift เพื่อวาง"
+place-success: "§aคุณวางของลงแล้ว!"
+carry-entity-success: "§aคุณอุ้มมันขึ้นมาแล้ว! ปล่อย Shift เพื่อวาง"
+cannot-carry-entity: "§cคุณไม่สามารถอุ้มสิ่งนี้ได้!"
+
+# --- Entity Blacklist ---
+# รายชื่อ entity ที่ไม่อนุญาตให้อุ้ม
+# ใช้ชื่อ entity type ตามมาตรฐานของ Minecraft
+entity-blacklist:
+  - "player"
+  - "ender_dragon"
+  - "wither"
+  - "item_frame"
+  - "painting"
+  - "falling_block"
+  - "armor_stand"
+
+
+place-too-far: "&cคุณอยู่ไกลเกินไปที่จะวางสิ่งนั้น!"
+place-obstructed: "&cคุณไม่สามารถวางของตรงนี้ได้ มันมีบล็อกขวางอยู่"
+cannot-carry-player: "&cเซิร์ฟเวอร์นี้ปิดระบบอุ้มผู้เล่น"
+no-permission-player: "&cคุณไม่มีสิทธิ์ในการอุ้มผู้เล่น"
+no-permission-entity: "&cคุณไม่มีสิทธิ์ในการอุ้ม Entity"
+no-permission-block: "&cคุณไม่มีสิทธิ์ในการอุ้มบล็อก"
+action-too-fast: "&cคุณกำลังคลิกเร็วเกินไป! (ติดคูลดาวน์)"

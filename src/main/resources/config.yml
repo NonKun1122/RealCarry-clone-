@@ -1,0 +1,16 @@
+############################
+#       by NonKungCH       #
+# --- RealCarry Config --- #
+############################
+
+# ระดับความช้า (Slowness) ที่จะใช้ขณะอุ้ม (0 = Slowness 1, 1 = Slowness 2)
+slowness-level: 0
+
+# ข้อความ
+messages:
+  plugin-reloaded: "&aRealCarry config ถูกรีโหลดแล้ว!"
+  no-permission: "&cคุณไม่มีสิทธิ์ใช้คำสั่งนี้"
+  carrying-block: "&aคุณอุ้ม %block% ขึ้นมา!"
+  carrying-entity: "&aคุณอุ้ม %entity% ขึ้นมา!"
+  placed-object: "&eคุณวางสิ่งที่อุ้มลงแล้ว!"
+  already-carrying: "&cคุณอุ้มของอยู่แล้ว!"
