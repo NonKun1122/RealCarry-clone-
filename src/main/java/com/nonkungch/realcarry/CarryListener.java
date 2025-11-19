@@ -12,88 +12,94 @@ import org.bukkit.event.player.PlayerInteractAtEntityEvent;
 import org.bukkit.event.player.PlayerInteractEvent;
 import org.bukkit.event.player.PlayerQuitEvent;
 
+import java.util.HashMap;
+import java.util.UUID;
+
 public class CarryListener implements Listener {
 
     private final RealCarry plugin;
     private final CarryingManager carryingManager;
+
+    private final HashMap<UUID, Long> cooldown = new HashMap<>();
 
     public CarryListener(RealCarry plugin, CarryingManager carryingManager) {
         this.plugin = plugin;
         this.carryingManager = carryingManager;
     }
 
-    /**
-     * ทำงานเมื่อผู้เล่น Shift + คลิกขวา ที่ Entity (เพื่ออุ้ม)
-     */
+    private boolean onCooldown(Player p) {
+        long now = System.currentTimeMillis();
+        long last = cooldown.getOrDefault(p.getUniqueId(), 0L);
+        return now - last < 200;
+    }
+
+    private void setCooldown(Player p) {
+        cooldown.put(p.getUniqueId(), System.currentTimeMillis());
+    }
+
+
+    // ====================================
+    //   อุ้มสัตว์
+    // ====================================
     @EventHandler
-    public void onPlayerInteractEntity(PlayerInteractAtEntityEvent event) {
+    public void onEntityInteract(PlayerInteractAtEntityEvent event) {
         Player player = event.getPlayer();
-        Entity clickedEntity = event.getRightClicked();
+        Entity entity = event.getRightClicked();
 
-        // 1. ตรวจสอบเงื่อนไขพื้นฐาน
-        if (!player.isSneaking() || !player.hasPermission("realcarry.use")) {
-            return;
-        }
-        
-        // 2. ถ้ากำลังอุ้มของอยู่แล้ว ต้องวางก่อน
+        if (!player.isSneaking() || !player.hasPermission("realcarry.use")) return;
+        if (onCooldown(player)) return;
+
+        setCooldown(player);
+
         if (carryingManager.isCarrying(player)) {
-            // ยกเลิก event เพื่อป้องกันการโต้ตอบกับ Entity ในขณะที่กำลังอุ้ม
-            event.setCancelled(true); 
+            event.setCancelled(true);
             return;
         }
 
-        // 3. ตรวจสอบว่าเป็นสัตว์ (หรือ Entity ที่อุ้มได้)
-        if (clickedEntity instanceof Animals) {
-            carryingManager.startCarryingEntity(player, clickedEntity);
-            event.setCancelled(true); // ยกเลิก event เพื่อไม่ให้เกิดการทำงานปกติ
+        if (entity instanceof Animals) {
+            carryingManager.startCarryingEntity(player, entity);
+            event.setCancelled(true);
         }
     }
 
-    /**
-     * ทำงานเมื่อผู้เล่น Shift + คลิกขวา (เพื่ออุ้มบล็อก หรือ วาง)
-     */
+    // ====================================
+    //   อุ้มบล็อก / วาง
+    // ====================================
     @EventHandler
-    public void onPlayerInteract(PlayerInteractEvent event) {
+    public void onBlockInteract(PlayerInteractEvent event) {
+
         Player player = event.getPlayer();
 
-        // 1. ตรวจสอบเงื่อนไขพื้นฐาน
-        if (!player.isSneaking() || !player.hasPermission("realcarry.use")) {
-            return;
-        }
+        if (!player.isSneaking() || !player.hasPermission("realcarry.use")) return;
+        if (onCooldown(player)) return;
 
-        // 2. ต้องเป็นการคลิกขวาที่บล็อกเท่านั้น
-        if (event.getAction() != Action.RIGHT_CLICK_BLOCK || event.getClickedBlock() == null) {
-            return;
-        }
-        
-        // 3. ถ้ากำลังอุ้มอะไรอยู่ = "วาง"
+        if (event.getAction() != Action.RIGHT_CLICK_BLOCK || event.getClickedBlock() == null) return;
+
+        setCooldown(player);
+
+        // วาง
         if (carryingManager.isCarrying(player)) {
-            
-            // หาตำแหน่งที่จะวาง: บนบล็อกที่คลิก (ใช้ getBlockFace เพื่อหาบล็อกถัดไป)
-            Location dropLoc = event.getClickedBlock().getRelative(event.getBlockFace()).getLocation();
-            
+
+            Location dropLoc = event.getClickedBlock()
+                    .getRelative(event.getBlockFace()).getLocation();
+
             carryingManager.stopCarrying(player, dropLoc);
-            event.setCancelled(true); // ยกเลิก event เพื่อป้องกันการวางไอเท็มในมือ
-
-        } else {
-            // 4. ถ้าไม่ได้อุ้มอะไร = "อุ้มบล็อก"
-            Material type = event.getClickedBlock().getType();
-            
-            // ป้องกันการอุ้ม Bedrock หรือบล็อกที่ทำลายไม่ได้
-            if (type.isAir() || type == Material.BEDROCK || type.getHardness() < 0) {
-                return;
-            }
-            
-            carryingManager.startCarryingBlock(player, event.getClickedBlock());
-            event.setCancelled(true); // ยกเลิก event เพื่อป้องกันการวางไอเท็มในมือ
+            event.setCancelled(true);
+            return;
         }
+
+        // อุ้มบล็อก
+        Material type = event.getClickedBlock().getType();
+
+        if (type.isAir() || type == Material.BEDROCK) return;
+
+        carryingManager.startCarryingBlock(player, event.getClickedBlock());
+        event.setCancelled(true);
     }
 
-    /**
-     * เคลียร์ของที่อุ้มเมื่อผู้เล่นออกจากเซิร์ฟเวอร์
-     */
+
     @EventHandler
-    public void onPlayerQuit(PlayerQuitEvent event) {
+    public void onQuit(PlayerQuitEvent event) {
         carryingManager.handlePlayerQuit(event.getPlayer());
     }
 }
