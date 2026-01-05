@@ -13,11 +13,10 @@ import org.bukkit.entity.EntityType;
 import org.bukkit.entity.Mob;
 import org.bukkit.entity.Player;
 import org.bukkit.inventory.EquipmentSlot;
-import org.bukkit.inventory.Inventory;
-import org.bukkit.inventory.InventoryHolder;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.potion.PotionEffect;
 import org.bukkit.potion.PotionEffectType;
+import org.bukkit.util.Vector;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -26,13 +25,12 @@ import java.util.UUID;
 public class CarryingManager {
 
     private final RealCarry plugin;
-
     private final Map<UUID, Entity> carryingEntity = new HashMap<>();
     private final Map<UUID, BlockData> carryingBlock = new HashMap<>();
     private final Map<UUID, BlockState> carriedBlockState = new HashMap<>();
     private final Map<UUID, ArmorStand> blockVisual = new HashMap<>();
-    private final Map<UUID, Inventory> carriedInventories = new HashMap<>();
-
+    private final Map<UUID, ItemStack[]> carriedInventories = new HashMap<>();
+    private final Map<UUID, Integer> carryTasks = new HashMap<>();
     private final Map<UUID, Boolean> entityAIState = new HashMap<>();
 
     public CarryingManager(RealCarry plugin) {
@@ -44,12 +42,44 @@ public class CarryingManager {
         return carryingEntity.containsKey(id) || carryingBlock.containsKey(id);
     }
 
-    // ================================================================
-    //                    Carrying Entity (Player / Mob)
-    // ================================================================
-    public void startCarryingEntity(Player player, Entity target) {
+    // ระบบขยับของให้อยู่ด้านหน้าผู้เล่นตาม Config
+    private void startPositionTask(Player player, Entity target, String type) {
         UUID id = player.getUniqueId();
+        double offsetX = plugin.getConfig().getDouble("offsets." + type + ".x", 0);
+        double offsetY = plugin.getConfig().getDouble("offsets." + type + ".y", 1.2);
+        double offsetZ = plugin.getConfig().getDouble("offsets." + type + ".z", 1.0);
 
+        int taskId = Bukkit.getScheduler().scheduleSyncRepeatingTask(plugin, () -> {
+            if (!player.isOnline() || !isCarrying(player)) {
+                stopTask(id);
+                return;
+            }
+
+            Location loc = player.getLocation();
+            // คำนวณทิศทางด้านหน้า (Vector)
+            Vector direction = loc.getDirection().setY(0).normalize();
+            Vector side = new Vector(-direction.getZ(), 0, direction.getX()).normalize();
+
+            Location targetLoc = loc.clone()
+                    .add(direction.multiply(offsetZ))
+                    .add(side.multiply(offsetX))
+                    .add(0, offsetY, 0);
+            
+            targetLoc.setYaw(loc.getYaw());
+            target.teleport(targetLoc);
+        }, 0L, 1L);
+
+        carryTasks.put(id, taskId);
+    }
+
+    private void stopTask(UUID id) {
+        if (carryTasks.containsKey(id)) {
+            Bukkit.getScheduler().cancelTask(carryTasks.remove(id));
+        }
+    }
+
+    public void startCarryingEntity(Player player, Entity target, String type) {
+        UUID id = player.getUniqueId();
         carryingEntity.put(id, target);
 
         if (target instanceof Mob mob) {
@@ -57,101 +87,66 @@ public class CarryingManager {
             mob.setAI(false);
         }
 
-        player.addPassenger(target);
+        startPositionTask(player, target, type);
         applySlow(player);
-
         player.sendMessage(plugin.getMsg("carrying-entity").replace("%entity%", target.getName()));
     }
 
-    // ================================================================
-    //                         Carrying Block
-    // ================================================================
     public void startCarryingBlock(Player player, Block block) {
         UUID id = player.getUniqueId();
-
-        BlockData data = block.getBlockData();
         BlockState state = block.getState();
-
-        carriedBlockState.put(id, state);
-        carryingBlock.put(id, data);
-
-        // เก็บ Inventory ถ้าเป็น Container
-        if (state instanceof InventoryHolder holder) {
-            Inventory oldInv = holder.getInventory();
-            Inventory invCopy = plugin.getServer().createInventory(null, oldInv.getSize());
-            invCopy.setContents(oldInv.getContents());
-            carriedInventories.put(id, invCopy);
+        
+        // แก้บัคกล่องคู่: ใช้ Snapshot เพื่อเก็บเฉพาะ 27 ช่องของใบที่คลิก
+        if (state instanceof Container container) {
+            carriedInventories.put(id, container.getSnapshotInventory().getContents());
         }
 
-        block.setType(Material.AIR);
+        carriedBlockState.put(id, state);
+        carryingBlock.put(id, block.getBlockData());
 
-        Location loc = player.getLocation().add(0, 0.02, 0);
-        ArmorStand stand = (ArmorStand) player.getWorld().spawnEntity(loc, EntityType.ARMOR_STAND);
+        // แก้บัค Ghost Block: ใช้ true เพื่อบังคับอัปเดตสถานะบล็อกให้หายไปจริงๆ
+        block.setType(Material.AIR, true);
 
+        ArmorStand stand = (ArmorStand) player.getWorld().spawnEntity(player.getLocation(), EntityType.ARMOR_STAND);
         stand.setVisible(false);
         stand.setGravity(false);
-        stand.setInvulnerable(true);
         stand.setMarker(true);
         stand.setSmall(true);
-        stand.setCollidable(false);
-
         stand.getEquipment().setHelmet(new ItemStack(state.getType()));
-        stand.addEquipmentLock(EquipmentSlot.HEAD, ArmorStand.LockType.REMOVING_OR_CHANGING);
-
-        player.addPassenger(stand);
+        
         blockVisual.put(id, stand);
-
+        startPositionTask(player, stand, "block");
         applySlow(player);
         player.sendMessage(plugin.getMsg("carrying-block").replace("%block%", state.getType().name()));
     }
 
-    // ================================================================
-    //                       Placing (Entity / Block)
-    // ================================================================
     public void stopCarrying(Player player, Location drop) {
         UUID id = player.getUniqueId();
+        stopTask(id);
 
-        // ---------------- ENTITY ----------------
         if (carryingEntity.containsKey(id)) {
             Entity entity = carryingEntity.remove(id);
-
-            if (player.getPassengers().contains(entity))
-                player.removePassenger(entity);
-
             if (entity instanceof Mob mob) {
-                boolean oldAI = entityAIState.getOrDefault(id, true);
-                mob.setAI(oldAI);
-                entityAIState.remove(id);
+                mob.setAI(entityAIState.getOrDefault(id, true));
             }
-
-            if (entity != null && entity.isValid()) {
-                entity.teleport(drop.clone().add(0.5, 0, 0.5));
-            }
-        }
-
-        // ---------------- BLOCK ----------------
+            if (entity != null) entity.teleport(drop.clone().add(0.5, 0, 0.5));
+        } 
         else if (carryingBlock.containsKey(id)) {
             BlockState state = carriedBlockState.remove(id);
             ArmorStand stand = blockVisual.remove(id);
-            Inventory inv = carriedInventories.remove(id);
+            ItemStack[] items = carriedInventories.remove(id);
 
-            if (stand != null) {
-                if (player.getPassengers().contains(stand))
-                    player.removePassenger(stand);
-                stand.remove();
-            }
-
+            if (stand != null) stand.remove();
             if (state != null) {
                 Block target = drop.getBlock();
-                target.setType(state.getType(), false);
-                target.setBlockData(state.getBlockData(), false);
-
-                // ใส่ Inventory กลับ ถ้าเป็น Container
-                if (inv != null && target.getState() instanceof InventoryHolder newHolder) {
-                    newHolder.getInventory().setContents(inv.getContents());
+                // วางบล็อกและบังคับอัปเดตฟิสิกส์
+                target.setType(state.getType(), true);
+                target.setBlockData(state.getBlockData(), true);
+                
+                if (items != null && target.getState() instanceof Container container) {
+                    container.getInventory().setContents(items);
                 }
             }
-
             carryingBlock.remove(id);
         }
 
@@ -159,9 +154,6 @@ public class CarryingManager {
         player.sendMessage(plugin.getMsg("placed-object"));
     }
 
-    // ================================================================
-    //                       Apply / Remove Slow
-    // ================================================================
     private void applySlow(Player player) {
         int lv = plugin.getConfig().getInt("slowness-level", 0);
         player.addPotionEffect(new PotionEffect(PotionEffectType.SLOWNESS, Integer.MAX_VALUE, lv, true, false));
@@ -171,65 +163,14 @@ public class CarryingManager {
         player.removePotionEffect(PotionEffectType.SLOWNESS);
     }
 
-    // ================================================================
-    //                          Player Quit
-    // ================================================================
     public void handlePlayerQuit(Player player) {
-        if (isCarrying(player)) {
-            stopCarrying(player, player.getLocation().add(0, 0.5, 0));
-        }
+        if (isCarrying(player)) stopCarrying(player, player.getLocation().add(0, 0.5, 0));
     }
 
-    // ================================================================
-    //                        Clear All Carrying
-    // ================================================================
     public void clearAllCarrying() {
-        // -------- Clear entities --------
-        for (UUID uuid : new HashMap<>(carryingEntity).keySet()) {
-            Player player = plugin.getServer().getPlayer(uuid);
-            if (player == null) continue;
-
-            Entity entity = carryingEntity.remove(uuid);
-            if (entity instanceof Mob mob) {
-                boolean oldAI = entityAIState.getOrDefault(uuid, true);
-                mob.setAI(oldAI);
-                entityAIState.remove(uuid);
-            }
-
-            if (player.getPassengers().contains(entity))
-                player.removePassenger(entity);
-
-            if (entity != null && entity.isValid()) {
-                entity.teleport(player.getLocation().add(0.5, 0, 0.5));
-            }
-        }
-
-        // -------- Clear blocks --------
-        for (UUID uuid : new HashMap<>(carryingBlock).keySet()) {
-            Player player = plugin.getServer().getPlayer(uuid);
-            if (player == null) continue;
-
-            BlockState state = carriedBlockState.remove(uuid);
-            ArmorStand stand = blockVisual.remove(uuid);
-            Inventory inv = carriedInventories.remove(uuid);
-
-            if (stand != null) {
-                if (player.getPassengers().contains(stand))
-                    player.removePassenger(stand);
-                stand.remove();
-            }
-
-            if (state != null) {
-                Block drop = player.getLocation().add(0, 0.5, 0).getBlock();
-                drop.setType(state.getType(), false);
-                drop.setBlockData(state.getBlockData(), false);
-
-                if (inv != null && drop.getState() instanceof InventoryHolder newHolder) {
-                    newHolder.getInventory().setContents(inv.getContents());
-                }
-            }
-
-            carryingBlock.remove(uuid);
+        for (UUID id : new HashMap<>(carryTasks).keySet()) {
+            Player p = Bukkit.getPlayer(id);
+            if (p != null) stopCarrying(p, p.getLocation());
         }
     }
 }
