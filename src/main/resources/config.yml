@@ -1,67 +1,35 @@
 ############################################################
-#                                                          #
 #                    RealCarry Config                      #
-#                   Created by NonKungCH                   #
-#                                                          #
 ############################################################
 
-# [EN] Slowness level applied while carrying (0 = Slowness I, 1 = Slowness II)
-# [TH] ระดับความช้าที่จะใส่ให้ผู้เล่นขณะอุ้มของ (0 คือความช้าระดับ 1, 1 คือความช้าระดับ 2)
 slowness-level: 0
 
-# ----------------------------------------------------------
-# Carrying Positions (Offsets)
-# ตั้งค่าตำแหน่งการอุ้ม
-# ----------------------------------------------------------
-# [EN] X: Left(-)/Right(+), Y: Down(-)/Up(+), Z: Back(-)/Front(+)
-# [TH] X: ซ้าย(-)/ขวา(+), Y: ต่ำ(-)/สูง(+), Z: หลัง(-)/หน้า(+)
+# รายชื่อ Entity ที่ "ห้าม" อุ้ม (Blacklist)
+forbidden-mobs:
+  - WITHER
+  - ENDER_DRAGON
+  - WARDEN
+  - ELDER_GUARDIAN
+
 offsets:
-  # [EN] Position for Blocks (using Armor Stand)
-  # [TH] ตำแหน่งสำหรับบล็อก (แสดงผลผ่าน Armor Stand)
   block:
     x: 0.0
     y: 1.2
     z: 1.0
-    
-  # [EN] Position for other Players
-  # [TH] ตำแหน่งสำหรับอุ้มผู้เล่นคนอื่น
   player:
     x: 0.0
     y: 1.2
     z: 1.2
-    
-  # [EN] Position for Mobs/Animals
-  # [TH] ตำแหน่งสำหรับอุ้มสัตว์หรือมอนสเตอร์
   mob:
     x: 0.0
     y: 1.2
     z: 1.2
 
-# ----------------------------------------------------------
-# Messages Configuration
-# ตั้งค่าข้อความภายในระบบ
-# ----------------------------------------------------------
 messages:
-  # [EN] When the plugin is reloaded via /rc reload
-  # [TH] เมื่อรีโหลดปลั๊กอินด้วยคำสั่ง /rc reload
-  plugin-reloaded: "&aRealCarry config has been reloaded! / รีโหลดการตั้งค่าเรียบร้อยแล้ว!"
-  
-  # [EN] When a player without permission tries to use commands
-  # [TH] เมื่อผู้เล่นที่ไม่มียศพยายามใช้คำสั่ง
-  no-permission: "&cYou don't have permission! / คุณไม่มีสิทธิ์ในการใช้คำสั่งนี้"
-  
-  # [EN] Message when picking up a block
-  # [TH] ข้อความเมื่อทำการหยิบบล็อก
-  carrying-block: "&aYou picked up %block%! / คุณกำลังอุ้มบล็อก %block%"
-  
-  # [EN] Message when picking up an entity (Player/Mob)
-  # [TH] ข้อความเมื่อทำการอุ้มสิ่งมีชีวิต
-  carrying-entity: "&aYou picked up %entity%! / คุณกำลังอุ้ม %entity%"
-  
-  # [EN] Message when placing the object down
-  # [TH] ข้อความเมื่อวางของลงบนพื้น
-  placed-object: "&eYou have placed the object! / วางของเรียบร้อยแล้ว!"
-  
-  # [EN] When trying to carry something while already carrying
-  # [TH] เมื่อพยายามจะอุ้มของเพิ่มทั้งที่อุ้มค้างไว้อยู่แล้ว
-  already-carrying: "&cYou are already carrying something! / คุณมีของหนักอยู่ในมือแล้ว!"
+  plugin-reloaded: "&aRealCarry config has been reloaded!"
+  no-permission: "&cYou don't have permission!"
+  carrying-block: "&aYou picked up %block%!"
+  carrying-entity: "&aYou picked up %entity%!"
+  placed-object: "&eYou have placed the object!"
+  already-carrying: "&cYou are already carrying something!"
+  cannot-carry: "&cYou cannot carry this type of entity! / คุณไม่สามารถอุ้มสิ่งนี้ได้"
