@@ -12,7 +12,6 @@ import org.bukkit.entity.Entity;
 import org.bukkit.entity.EntityType;
 import org.bukkit.entity.Mob;
 import org.bukkit.entity.Player;
-import org.bukkit.inventory.EquipmentSlot;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.potion.PotionEffect;
 import org.bukkit.potion.PotionEffectType;
@@ -37,12 +36,21 @@ public class CarryingManager {
         this.plugin = plugin;
     }
 
+    /**
+     * ดึงตัวแปร Plugin หลัก เพื่อใช้เข้าถึง Config ในไฟล์อื่น
+     */
+    public RealCarry getPlugin() {
+        return this.plugin;
+    }
+
     public boolean isCarrying(Player player) {
         UUID id = player.getUniqueId();
         return carryingEntity.containsKey(id) || carryingBlock.containsKey(id);
     }
 
-    // ระบบขยับของให้อยู่ด้านหน้าผู้เล่นตาม Config
+    /**
+     * เริ่ม Task รันทุก Tick เพื่ออัปเดตตำแหน่งสิ่งที่อุ้มให้ตามตัวผู้เล่น
+     */
     private void startPositionTask(Player player, Entity target, String type) {
         UUID id = player.getUniqueId();
         double offsetX = plugin.getConfig().getDouble("offsets." + type + ".x", 0);
@@ -50,13 +58,13 @@ public class CarryingManager {
         double offsetZ = plugin.getConfig().getDouble("offsets." + type + ".z", 1.0);
 
         int taskId = Bukkit.getScheduler().scheduleSyncRepeatingTask(plugin, () -> {
+            // หากผู้เล่นออกเกม หรือไม่ได้อุ้มอยู่แล้ว ให้หยุด Task ทันที
             if (!player.isOnline() || !isCarrying(player)) {
                 stopTask(id);
                 return;
             }
 
             Location loc = player.getLocation();
-            // คำนวณทิศทางด้านหน้า (Vector)
             Vector direction = loc.getDirection().setY(0).normalize();
             Vector side = new Vector(-direction.getZ(), 0, direction.getX()).normalize();
 
@@ -84,7 +92,7 @@ public class CarryingManager {
 
         if (target instanceof Mob mob) {
             entityAIState.put(id, mob.hasAI());
-            mob.setAI(false);
+            mob.setAI(false); // ปิด AI เพื่อไม่ให้สัตว์ขยับตัวขณะอุ้ม
         }
 
         startPositionTask(player, target, type);
@@ -96,7 +104,7 @@ public class CarryingManager {
         UUID id = player.getUniqueId();
         BlockState state = block.getState();
         
-        // แก้บัคกล่องคู่: ใช้ Snapshot เพื่อเก็บเฉพาะ 27 ช่องของใบที่คลิก
+        // เก็บข้อมูล Snapshot ของ Inventory หากเป็นกล่องหรือเตาเผา
         if (state instanceof Container container) {
             carriedInventories.put(id, container.getSnapshotInventory().getContents());
         }
@@ -104,9 +112,10 @@ public class CarryingManager {
         carriedBlockState.put(id, state);
         carryingBlock.put(id, block.getBlockData());
 
-        // แก้บัค Ghost Block: ใช้ true เพื่อบังคับอัปเดตสถานะบล็อกให้หายไปจริงๆ
+        // ทำให้บล็อกหายไปจากโลก (แก้ Ghost Block ด้วยการ Force Update)
         block.setType(Material.AIR, true);
 
+        // สร้าง ArmorStand ล่องหนเพื่อแสดงผลบล็อกที่กำลังอุ้ม
         ArmorStand stand = (ArmorStand) player.getWorld().spawnEntity(player.getLocation(), EntityType.ARMOR_STAND);
         stand.setVisible(false);
         stand.setGravity(false);
@@ -127,7 +136,7 @@ public class CarryingManager {
         if (carryingEntity.containsKey(id)) {
             Entity entity = carryingEntity.remove(id);
             if (entity instanceof Mob mob) {
-                mob.setAI(entityAIState.getOrDefault(id, true));
+                mob.setAI(entityAIState.getOrDefault(id, true)); // คืนค่า AI เดิม
             }
             if (entity != null) entity.teleport(drop.clone().add(0.5, 0, 0.5));
         } 
@@ -139,10 +148,10 @@ public class CarryingManager {
             if (stand != null) stand.remove();
             if (state != null) {
                 Block target = drop.getBlock();
-                // วางบล็อกและบังคับอัปเดตฟิสิกส์
                 target.setType(state.getType(), true);
                 target.setBlockData(state.getBlockData(), true);
                 
+                // คืนค่าไอเทมในกล่อง
                 if (items != null && target.getState() instanceof Container container) {
                     container.getInventory().setContents(items);
                 }

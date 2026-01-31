@@ -7,6 +7,7 @@ import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
 import org.bukkit.event.block.Action;
+import org.bukkit.event.entity.PlayerDeathEvent;
 import org.bukkit.event.player.PlayerInteractAtEntityEvent;
 import org.bukkit.event.player.PlayerInteractEvent;
 import org.bukkit.event.player.PlayerQuitEvent;
@@ -14,6 +15,7 @@ import org.bukkit.inventory.EquipmentSlot;
 import org.bukkit.inventory.ItemStack;
 
 import java.util.HashMap;
+import java.util.List;
 import java.util.UUID;
 
 public class CarryListener implements Listener {
@@ -25,10 +27,78 @@ public class CarryListener implements Listener {
         this.manager = manager;
     }
 
+    // แก้บัค: ปล่อยของทันทีเมื่อผู้เล่นตาย เพื่อไม่ให้ Entity ค้างกลางอากาศ
+    @EventHandler
+    public void onPlayerDeath(PlayerDeathEvent event) {
+        Player player = event.getEntity();
+        if (manager.isCarrying(player)) {
+            manager.stopCarrying(player, player.getLocation());
+        }
+    }
+
+    @EventHandler
+    public void onEntityInteract(PlayerInteractAtEntityEvent event) {
+        Player player = event.getPlayer();
+        Entity entity = event.getRightClicked();
+
+        if (event.getHand() != EquipmentSlot.HAND) return;
+        if (manager.isCarrying(player)) {
+            event.setCancelled(true);
+            return;
+        }
+
+        if (!player.isSneaking() || onCooldown(player) || !isHandEmpty(player)) return;
+
+        setCooldown(player);
+
+        if (entity instanceof Player) {
+            manager.startCarryingEntity(player, entity, "player");
+        } else if (entity.getType().isAlive()) {
+            // ระบบ Blacklist: เช็ครายชื่อที่ห้ามอุ้ม
+            List<String> forbidden = manager.getPlugin().getConfig().getStringList("forbidden-mobs");
+            if (forbidden.contains(entity.getType().name())) {
+                player.sendMessage(manager.getPlugin().getMsg("cannot-carry"));
+                return;
+            }
+            manager.startCarryingEntity(player, entity, "mob");
+        }
+        
+        event.setCancelled(true);
+    }
+
+    @EventHandler
+    public void onBlockInteract(PlayerInteractEvent event) {
+        Player player = event.getPlayer();
+        if (event.getHand() != EquipmentSlot.HAND) return;
+
+        if (manager.isCarrying(player)) {
+            if (!player.isSneaking()) return;
+            
+            if (event.getAction() == Action.RIGHT_CLICK_BLOCK || event.getAction() == Action.RIGHT_CLICK_AIR) {
+                if (onCooldown(player)) return;
+                setCooldown(player);
+
+                Location dropLoc = (event.getClickedBlock() != null && event.getAction() == Action.RIGHT_CLICK_BLOCK) ? 
+                    event.getClickedBlock().getRelative(event.getBlockFace()).getLocation() : 
+                    player.getLocation().getBlock().getLocation();
+
+                manager.stopCarrying(player, dropLoc);
+                event.setCancelled(true);
+            }
+            return;
+        }
+
+        if (event.getAction() == Action.RIGHT_CLICK_BLOCK && player.isSneaking() && isHandEmpty(player)) {
+            Material type = event.getClickedBlock().getType();
+            if (type.isAir() || type == Material.BEDROCK) return;
+            setCooldown(player);
+            manager.startCarryingBlock(player, event.getClickedBlock());
+            event.setCancelled(true);
+        }
+    }
+
     private boolean onCooldown(Player p) {
-        long now = System.currentTimeMillis();
-        long last = cooldown.getOrDefault(p.getUniqueId(), 0L);
-        return now - last < 200; // ป้องกันการคลิกเบิ้ล
+        return System.currentTimeMillis() - cooldown.getOrDefault(p.getUniqueId(), 0L) < 200;
     }
 
     private void setCooldown(Player p) {
@@ -40,96 +110,6 @@ public class CarryListener implements Listener {
         return item == null || item.getType() == Material.AIR;
     }
 
-    // ===========================================================
-    // 1. จัดการการอุ้ม/วาง Entity (ผู้เล่น และ มอนสเตอร์)
-    // ===========================================================
-    @EventHandler
-    public void onEntityInteract(PlayerInteractAtEntityEvent event) {
-        Player player = event.getPlayer();
-        Entity entity = event.getRightClicked();
-
-        // ตรวจสอบมือหลักเท่านั้น
-        if (event.getHand() != EquipmentSlot.HAND) return;
-
-        // ถ้ากำลังอุ้มอยู่แล้ว ให้ยกเลิกการคลิก Entity อื่น
-        if (manager.isCarrying(player)) {
-            event.setCancelled(true);
-            return;
-        }
-
-        // ต้องกด Shift และมือเปล่า
-        if (!player.isSneaking()) return;
-        if (onCooldown(player)) return;
-        if (!isHandEmpty(player)) return;
-
-        setCooldown(player);
-
-        // แยกประเภทเพื่อใช้ Offset ใน Config
-        if (entity instanceof Player) {
-            manager.startCarryingEntity(player, entity, "player");
-        } else if (entity.getType().isAlive()) {
-            manager.startCarryingEntity(player, entity, "mob");
-        }
-        
-        event.setCancelled(true);
-    }
-
-    // ===========================================================
-    // 2. จัดการการอุ้ม/วาง บล็อก (รวมถึงกล่อง และเตาเผา)
-    // ===========================================================
-    @EventHandler
-    public void onBlockInteract(PlayerInteractEvent event) {
-        Player player = event.getPlayer();
-
-        // ตรวจสอบมือหลัก
-        if (event.getHand() != EquipmentSlot.HAND) return;
-
-        // ----- กรณีที่ 1: กำลังอุ้มอยู่ (ต้องการวาง) -----
-        if (manager.isCarrying(player)) {
-            // ต้องกด Shift เพื่อวาง
-            if (!player.isSneaking()) return;
-            
-            if (event.getAction() == Action.RIGHT_CLICK_BLOCK || event.getAction() == Action.RIGHT_CLICK_AIR) {
-                if (onCooldown(player)) return;
-                setCooldown(player);
-
-                Location dropLoc;
-                if (event.getClickedBlock() != null && event.getAction() == Action.RIGHT_CLICK_BLOCK) {
-                    // วางบนหน้าบล็อกที่คลิก
-                    dropLoc = event.getClickedBlock().getRelative(event.getBlockFace()).getLocation();
-                } else {
-                    // วางที่เท้าผู้เล่น (กรณีคลิกอากาศ)
-                    dropLoc = player.getLocation().getBlock().getLocation();
-                }
-
-                manager.stopCarrying(player, dropLoc);
-                event.setCancelled(true);
-            }
-            return;
-        }
-
-        // ----- กรณีที่ 2: ไม่ได้อุ้ม (ต้องการหยิบ) -----
-        if (event.getAction() == Action.RIGHT_CLICK_BLOCK) {
-            if (!player.isSneaking()) return;
-            if (onCooldown(player)) return;
-            
-            // ต้องมือเปล่าถึงจะหยิบได้
-            if (!isHandEmpty(player)) return;
-
-            Material type = event.getClickedBlock().getType();
-            
-            // ป้องกันการหยิบบล็อกอากาศ หรือ Bedrock
-            if (type.isAir() || type == Material.BEDROCK) return;
-
-            setCooldown(player);
-            manager.startCarryingBlock(player, event.getClickedBlock());
-            event.setCancelled(true);
-        }
-    }
-
-    // ===========================================================
-    // 3. จัดการกรณีผู้เล่นออกจากเซิร์ฟเวอร์
-    // ===========================================================
     @EventHandler
     public void onQuit(PlayerQuitEvent event) {
         manager.handlePlayerQuit(event.getPlayer());
